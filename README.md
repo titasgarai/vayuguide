@@ -18,7 +18,7 @@
   <a href="https://vayuguide.vercel.app">
     <img src="https://img.shields.io/badge/Live_App-vayuguide.vercel.app-15502E?style=for-the-badge&logo=vercel&logoColor=white" alt="Live Demo" />
   </a>
-  <a href="https://YOUR-PUBLIC-VIDEO-URL">
+  <a href="[https://YOUR-PUBLIC-VIDEO-URL](https://youtu.be/E3KnYJ0qW14)">
     <img src="https://img.shields.io/badge/90s_Walkthrough-Watch_Video-1A4039?style=for-the-badge&logo=youtube&logoColor=white" alt="Demo Video" />
   </a>
   <a href="https://YOUR-LINKEDIN-POST-URL">
