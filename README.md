@@ -31,7 +31,7 @@
   <img src="https://img.shields.io/badge/Next.js_15-14201E?style=flat-square&logo=nextdotjs&logoColor=white" alt="Next.js 15" />
   <img src="https://img.shields.io/badge/TypeScript-3178C6?style=flat-square&logo=typescript&logoColor=white" alt="TypeScript" />
   <img src="https://img.shields.io/badge/Tailwind_CSS-06B6D4?style=flat-square&logo=tailwindcss&logoColor=white" alt="Tailwind CSS" />
-  <img src="https://img.shields.io/badge/Gemini_2.5_Flash-4285F4?style=flat-square&logo=googlegemini&logoColor=white" alt="Gemini 2.5 Flash" />
+  <img src="https://img.shields.io/badge/Gemini_3.5_Flash_Lite-4285F4?style=flat-square&logo=googlegemini&logoColor=white" alt="Gemini 3.5 Flash-Lite" />
   <img src="https://img.shields.io/badge/Zod-3E67B1?style=flat-square&logo=zod&logoColor=white" alt="Zod" />
   <img src="https://img.shields.io/badge/Vitest-6E9F18?style=flat-square&logo=vitest&logoColor=white" alt="Vitest" />
 </p>
@@ -60,7 +60,7 @@ Standard AQI apps stop at a scary red number. VayuGuide translates **verified, r
 | :--- | :--- |
 | **Zero Dummy / Guessed Data** | Live NAQI, PM2.5, and PM10 readings originate strictly from `src/backend/services/aqi.service.ts` with station name and **IST timestamp** attribution. |
 | **Pan-India Coverage** | Queries **WAQI / CPCB physical stations** first (e.g., Delhi, Kolkata) and falls back automatically to **Open-Meteo CAMS** (prioritizing `country_code: IN`) for non-metro towns like Malda. |
-| **Side-by-Side Persona Compare** | Dedicated `/api/compare` endpoint fetches live telemetry **once** and runs two **Gemini 2.5 Flash** calls concurrently (`Promise.all`) for instant visual comparison. |
+| **Side-by-Side Persona Compare** | Dedicated `/api/compare` endpoint fetches live telemetry **once** and runs two **Gemini 3.5 Flash-Lite** calls concurrently (`Promise.all`) for instant visual comparison. |
 | **Production Hardening** | Protected by Zod payload validation, prompt-injection delimiters, GitHub Actions CI (`lint`, `typecheck`, `vitest`, `build`), `maxDuration = 60s`, and encrypted Vercel Production Secrets. |
 
 ---
@@ -105,7 +105,7 @@ flowchart LR
     WAQI -->|Station Found| CPCB["CPCB 6-Tier NAQI<br/>+ IST Timestamp"]
     WAQI -->|No Station / Fallback| METEO["Fallback: Open-Meteo<br/>Geocoding (IN) + CAMS"]
     METEO --> CPCB
-    CPCB --> GEM["Gemini 2.5 Flash<br/>Strict JSON Schema<br/>(Parallel via Promise.all in Compare)"]
+    CPCB --> GEM["Gemini 3.5 Flash-Lite<br/>Strict JSON Schema<br/>(Parallel via Promise.all in Compare)"]
     GEM --> RESP["Live NAQI Card +<br/>Justified Routine, Hacks & Swaps"]
 
     style UI fill:#EDF4F0,stroke:#15502E,color:#14201E
@@ -127,12 +127,11 @@ vayuguide/
 │   ├── app/                              # Next.js 15 App Router pages & thin API routes (maxDuration = 60)
 │   ├── backend/
 │   │   ├── services/aqi.service.ts       # Dual-source WAQI/Open-Meteo pipeline + 15-min cache + CPCB NAQI
-│   │   ├── services/gemini.service.ts    # Gemini 2.5 Flash client with strict responseSchema JSON output
+│   │   ├── services/gemini.service.ts    # Gemini 3.5 Flash-Lite client with strict responseSchema JSON output
 │   │   └── validators/schemas.ts         # Zod runtime payload schemas
 │   ├── frontend/components/              # Editorial UI components (pangram.com-inspired design system)
 │   └── shared/types/aqi.ts               # Shared TypeScript contracts
-├── tests/                                # Vitest unit & route handler tests (aqi.test.ts, compare.test.ts)
-└── Dockerfile                            # Optional multi-stage Node 20 standalone container
+└── tests/                                # Vitest unit & route handler tests (aqi.test.ts, compare.test.ts)
 ```
 
 </details>
@@ -158,7 +157,7 @@ All **11 unit tests** (`npm run verify`) and **6 live production smoke checks** 
 
 | Layer | Handled By | Scope |
 | :--- | :--- | :--- |
-| **AI Synthesis & Scaffolding** | **Gemini 2.5 Flash + Antigravity IDE** | Persona-tailored Morning/Afternoon/Evening routines, purifier-aware indoor hacks, sustainable swaps with direct impact, and modular UI scaffolding from `docs/DESIGN.md`. |
+| **AI Synthesis & Scaffolding** | **Gemini 3.5 Flash-Lite + Antigravity IDE** | Persona-tailored Morning/Afternoon/Evening routines, purifier-aware indoor hacks, sustainable swaps with direct impact, and modular UI scaffolding from `docs/DESIGN.md`. |
 | **Deterministic Backend & Ops** | **Custom Engineering** | Dual-source WAQI-to-Open-Meteo fallback, 15-minute server cache, 6-tier Indian CPCB NAQI banding, Zod validation, parallel `/api/compare` orchestration, Vitest + live smoke tests, GitHub Actions CI, and encrypted Vercel production secrets. |
 
 <details>
@@ -196,10 +195,9 @@ npm run smoke -- http://localhost:3000
 </details>
 
 <details>
-<summary><strong>Click to expand: Production deployment (Vercel Primary + Optional Docker / Cloud Run)</strong></summary>
+<summary><strong>Click to expand: Production deployment (Vercel)</strong></summary>
 
-#### Primary: Vercel Production (Live at `vayuguide.vercel.app`)
-Both `/api/analyze` and `/api/compare` export `maxDuration = 60`, and secrets are stored exclusively as encrypted **Vercel Production Environment Secrets**:
+Both `/api/analyze` and `/api/compare` export `maxDuration = 60`, and secrets are stored exclusively as encrypted **Vercel Production Environment Secrets** (never exposed via `NEXT_PUBLIC_`):
 
 ```bash
 npx vercel link --yes --project vayuguide
@@ -207,19 +205,6 @@ printf '%s' 'YOUR_GEMINI_API_KEY' | npx vercel env add GEMINI_API_KEY production
 printf '%s' 'YOUR_WAQI_API_TOKEN' | npx vercel env add WAQI_API_TOKEN production
 npx vercel --prod --yes
 npm run smoke -- https://vayuguide.vercel.app
-```
-
-#### Optional: Container Deployment (Docker / Google Cloud Run)
-Includes a multi-stage standalone Next.js 15 `Dockerfile` listening on `PORT=8080`:
-
-```bash
-gcloud run deploy vayuguide \
-  --source . \
-  --region asia-south1 \
-  --port 8080 \
-  --memory 512Mi \
-  --allow-unauthenticated \
-  --set-secrets="GEMINI_API_KEY=GEMINI_API_KEY:latest,WAQI_API_TOKEN=WAQI_API_TOKEN:latest"
 ```
 
 </details>
