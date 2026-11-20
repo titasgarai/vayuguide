@@ -1,0 +1,21 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-canvas: 248 247 245;
+  --bg-surface: 255 255 255;
+  --bg-subtle: 242 242 242;
+  --bg-tint: 237 244 240;
+  --ink-primary: 20 32 30;
+  --brand-primary: 21 80 46;
+  --brand-secondary: 26 64 57;
+  --border-hairline: 228 230 227;
+  --border-tint: 200 221 210;
+}
+
+body {
+  background-color: rgb(var(--bg-canvas));
+  color: rgb(var(--ink-primary));
+}
+
