@@ -21,7 +21,7 @@
   <a href="https://youtu.be/E3KnYJ0qW14">
     <img src="https://img.shields.io/badge/90s_Walkthrough-Watch_Video-1A4039?style=for-the-badge&logo=youtube&logoColor=white" alt="Demo Video" />
   </a>
-  <a href="https://YOUR-LINKEDIN-POST-URL">
+  <a href="https://lnkd.in/p/dJfRZXaj">
     <img src="https://img.shields.io/badge/Build_Story-LinkedIn_Post-0A66C2?style=for-the-badge&logo=linkedin&logoColor=white" alt="LinkedIn Post" />
   </a>
 </p>
