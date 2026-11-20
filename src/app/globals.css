@@ -3,6 +3,9 @@
 @tailwind utilities;
 
 :root {
+  --font-serif: Georgia;
+  --font-sans: system-ui;
+  --font-mono: ui-monospace;
   --bg-canvas: 248 247 245;
   --bg-surface: 255 255 255;
   --bg-subtle: 242 242 242;
@@ -18,4 +21,3 @@ body {
   background-color: rgb(var(--bg-canvas));
   color: rgb(var(--ink-primary));
 }
-
