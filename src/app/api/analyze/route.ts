@@ -4,6 +4,8 @@ import { getLiveAqiForCity } from '@/backend/services/aqi.service';
 import { generatePersonalizedGuidance } from '@/backend/services/gemini.service';
 import { AssistantResponse } from '@/shared/types/aqi';
 
+export const maxDuration = 60;
+
 // In-memory sliding rate-limiter: max 30 requests per IP per minute
 const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;

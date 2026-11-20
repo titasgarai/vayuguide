@@ -26,7 +26,7 @@ async function runCheck(name, method, path, payload, expectedStatus, validator) 
       const res = await fetch(`${baseUrl}${path}`, options);
       const text = await res.text();
 
-      if ((res.status === 429 || res.status === 500) && attempt === 1) {
+      if ((res.status === 429 || res.status === 500 || res.status === 504) && attempt === 1) {
         console.log(`[RETRY] ${name} — Server responded with HTTP ${res.status}, retrying in 3s...`);
         await sleep(3000);
         continue;

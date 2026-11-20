@@ -74,7 +74,7 @@ export function formatIstTimestamp(rawIsoOrDate?: string): string {
 
 async function fetchFromWaqi(city: string, token: string): Promise<LiveAqiMetrics | null> {
   const url = `https://api.waqi.info/feed/${encodeURIComponent(city)}/?token=${encodeURIComponent(token)}`;
-  const res = await fetch(url, { cache: 'no-store' });
+  const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(3500) });
   if (!res.ok) return null;
 
   const json = await res.json();
@@ -115,7 +115,7 @@ async function fetchFromOpenMeteo(city: string): Promise<LiveAqiMetrics> {
   const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
     city
   )}&count=5&language=en&format=json`;
-  const geoRes = await fetch(geoUrl, { cache: 'no-store' });
+  const geoRes = await fetch(geoUrl, { cache: 'no-store', signal: AbortSignal.timeout(3500) });
   if (!geoRes.ok) {
     throw new Error('Failed to geocode location.');
   }
@@ -136,7 +136,7 @@ async function fetchFromOpenMeteo(city: string): Promise<LiveAqiMetrics> {
   const match = results.find((r) => r.country_code === 'IN') || results[0];
 
   const aqUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${match.latitude}&longitude=${match.longitude}&current=pm2_5,pm10,nitrogen_dioxide,ozone&timezone=Asia%2FKolkata`;
-  const aqRes = await fetch(aqUrl, { cache: 'no-store' });
+  const aqRes = await fetch(aqUrl, { cache: 'no-store', signal: AbortSignal.timeout(3500) });
   if (!aqRes.ok) {
     throw new Error('Live air quality service is temporarily unavailable.');
   }

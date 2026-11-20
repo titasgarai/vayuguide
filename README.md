@@ -4,7 +4,7 @@
 > Real-time pan-India air quality telemetry paired with Gemini 2.5 Flash to deliver calm, justified, low-emission daily routines for every household.
 
 [![Verify VayuGuide](https://github.com/titasgarai/vayuguide/actions/workflows/verify.yml/badge.svg)](https://github.com/titasgarai/vayuguide/actions/workflows/verify.yml)
-[![Live Demo](https://img.shields.io/badge/Live_Demo-Cloud_Run-15502E?style=for-the-badge)](https://YOUR-CLOUD-RUN-URL.a.run.app)
+[![Live Demo](https://img.shields.io/badge/Live_Demo-Vercel_Production-15502E?style=for-the-badge)](https://vayuguide.vercel.app)
 [![Demo Video](https://img.shields.io/badge/Video_Walkthrough-Watch_Now-1A4039?style=for-the-badge)](https://YOUR-PUBLIC-VIDEO-URL)
 [![LinkedIn Post](https://img.shields.io/badge/Thought_Process-LinkedIn_Post-0a66c2?style=for-the-badge)](https://YOUR-LINKEDIN-POST-URL)
 
@@ -33,12 +33,12 @@ Replace `BASE_URL` with your deployed Cloud Run URL (or `http://localhost:3000`)
 
 ```bash
 # Single Household Plan (Delhi — Parent, no air purifier)
-curl -X POST https://YOUR-CLOUD-RUN-URL.a.run.app/api/analyze \
+curl -X POST https://vayuguide.vercel.app/api/analyze \
   -H "Content-Type: application/json" \
   -d '{"city":"Delhi","persona":"parent","hasAirPurifier":false,"plannedActivity":"Evening outdoor park play at 5 PM"}'
 
 # Side-by-Side Persona Compare (Delhi — Parent vs. Daily Commuter)
-curl -X POST https://YOUR-CLOUD-RUN-URL.a.run.app/api/compare \
+curl -X POST https://vayuguide.vercel.app/api/compare \
   -H "Content-Type: application/json" \
   -d '{"city":"Delhi","profileA":{"persona":"parent","hasAirPurifier":false,"plannedActivity":"Evening park play at 5 PM"},"profileB":{"persona":"commuter","hasAirPurifier":false,"plannedActivity":"Morning office commute by two-wheeler"}}'
 ```
@@ -102,8 +102,8 @@ Validates homepage reachability, Delhi (*Parent*), Kolkata (*Commuter*), Malda (
 # Against local server
 npm run smoke -- http://localhost:3000
 
-# Against deployed Google Cloud Run service
-npm run smoke -- https://YOUR-CLOUD-RUN-URL.a.run.app
+# Against deployed Vercel Production service
+npm run smoke -- https://vayuguide.vercel.app
 ```
 
 ---

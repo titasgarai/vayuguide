@@ -119,7 +119,6 @@ Provide 3 specific indoor_air_hacks and 3 specific sustainable_alternatives with
 
   const modelsToTry = [
     'gemini-3.5-flash-lite',
-    'gemini-3.5-flash',
     'gemini-flash-lite-latest',
   ];
   let lastError: unknown = null;
