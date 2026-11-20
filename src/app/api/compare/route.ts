@@ -55,12 +55,12 @@ export async function POST(request: Request) {
       );
     }
 
-    const { city, profileA, profileB } = parsed.data;
-    const metrics = await getLiveAqiForCity(city);
+    const { city, latitude, longitude, profileA, profileB } = parsed.data;
+    const metrics = await getLiveAqiForCity(city, latitude, longitude);
 
     const [guidanceA, guidanceB] = await Promise.all([
-      generatePersonalizedGuidance(metrics, { city, ...profileA }),
-      generatePersonalizedGuidance(metrics, { city, ...profileB }),
+      generatePersonalizedGuidance(metrics, { city, latitude, longitude, ...profileA }),
+      generatePersonalizedGuidance(metrics, { city, latitude, longitude, ...profileB }),
     ]);
 
     const payload: CompareResponse = {
@@ -76,7 +76,7 @@ export async function POST(request: Request) {
     console.error('[Compare API Error]:', error);
     const message = error instanceof Error ? error.message : '';
 
-    if (message.includes('Could not find location')) {
+    if (message.includes('Could not find location') || message.includes('valid Indian city')) {
       return NextResponse.json({ error: message }, { status: 404 });
     }
 

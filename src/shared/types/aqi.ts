@@ -2,6 +2,8 @@ export type PersonaType = 'commuter' | 'parent' | 'senior' | 'student';
 
 export interface UserProfile {
   city: string;
+  latitude?: number;
+  longitude?: number;
   persona: PersonaType;
   hasAirPurifier: boolean;
   plannedActivity: string;
@@ -56,4 +58,3 @@ export interface CompareResponse {
   guidanceA: AiGuidance;
   guidanceB: AiGuidance;
 }
-

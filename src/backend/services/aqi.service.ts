@@ -4,6 +4,25 @@ const CACHE_TTL_MS = 15 * 60 * 1000;
 const MAX_CACHE_SIZE = 100;
 const aqiCache = new Map<string, { data: LiveAqiMetrics; expiresAt: number }>();
 
+export function haversineDistanceKm(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number
+): number {
+  const R = 6371; // Earth radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export function getIndianAqiCategory(aqi: number): LiveAqiMetrics['category'] {
   if (aqi <= 50) return 'Good';
   if (aqi <= 100) return 'Satisfactory';
@@ -72,8 +91,66 @@ export function formatIstTimestamp(rawIsoOrDate?: string): string {
   );
 }
 
-async function fetchFromWaqi(city: string, token: string): Promise<LiveAqiMetrics | null> {
-  const url = `https://api.waqi.info/feed/${encodeURIComponent(city)}/?token=${encodeURIComponent(token)}`;
+interface ResolvedLocation {
+  name: string;
+  state: string;
+  latitude: number;
+  longitude: number;
+}
+
+async function resolveIndianLocation(
+  city: string,
+  providedLat?: number,
+  providedLon?: number
+): Promise<ResolvedLocation> {
+  if (typeof providedLat === 'number' && typeof providedLon === 'number') {
+    return {
+      name: city.trim(),
+      state: '',
+      latitude: providedLat,
+      longitude: providedLon,
+    };
+  }
+
+  const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
+    city.trim()
+  )}&count=8&language=en&format=json`;
+  const geoRes = await fetch(geoUrl, { cache: 'no-store', signal: AbortSignal.timeout(3500) });
+  if (!geoRes.ok) {
+    throw new Error('Failed to geocode location.');
+  }
+
+  const geoJson = await geoRes.json();
+  const results: Array<{
+    name: string;
+    admin1?: string;
+    country_code?: string;
+    latitude: number;
+    longitude: number;
+  }> = geoJson.results || [];
+
+  const indianResults = results.filter((r) => r.country_code === 'IN');
+
+  if (indianResults.length === 0) {
+    throw new Error(`Could not find location "${city}". Please enter a valid Indian city.`);
+  }
+
+  const match = indianResults[0];
+  return {
+    name: match.name,
+    state: match.admin1 || '',
+    latitude: match.latitude,
+    longitude: match.longitude,
+  };
+}
+
+async function fetchFromWaqiGeo(
+  lat: number,
+  lon: number,
+  resolvedCity: string,
+  token: string
+): Promise<LiveAqiMetrics | null> {
+  const url = `https://api.waqi.info/feed/geo:${lat};${lon}/?token=${encodeURIComponent(token)}`;
   const res = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(3500) });
   if (!res.ok) return null;
 
@@ -81,6 +158,24 @@ async function fetchFromWaqi(city: string, token: string): Promise<LiveAqiMetric
   if (json.status !== 'ok' || typeof json.data?.aqi !== 'number') return null;
 
   const data = json.data;
+  const stationGeo = data.city?.geo;
+
+  // Strict 50 km proximity check: WAQI must have coordinates and be <= 50km
+  if (
+    !Array.isArray(stationGeo) ||
+    stationGeo.length < 2 ||
+    typeof stationGeo[0] !== 'number' ||
+    typeof stationGeo[1] !== 'number'
+  ) {
+    return null;
+  }
+
+  const distanceKm = haversineDistanceKm(lat, lon, stationGeo[0], stationGeo[1]);
+  if (distanceKm > 50) {
+    // Nearest station is too distant; trigger Open-Meteo fallback
+    return null;
+  }
+
   const pm25 = Math.round(data.iaqi?.pm25?.v ?? 0);
   const pm10 = Math.round(data.iaqi?.pm10?.v ?? 0);
 
@@ -98,8 +193,8 @@ async function fetchFromWaqi(city: string, token: string): Promise<LiveAqiMetric
   }
 
   return {
-    city,
-    stationName: data.city?.name || `${city} Monitoring Station`,
+    city: resolvedCity,
+    stationName: data.city?.name || `${resolvedCity} Monitoring Station`,
     aqi,
     category: getIndianAqiCategory(aqi),
     pm25,
@@ -111,31 +206,13 @@ async function fetchFromWaqi(city: string, token: string): Promise<LiveAqiMetric
   };
 }
 
-async function fetchFromOpenMeteo(city: string): Promise<LiveAqiMetrics> {
-  const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
-    city
-  )}&count=5&language=en&format=json`;
-  const geoRes = await fetch(geoUrl, { cache: 'no-store', signal: AbortSignal.timeout(3500) });
-  if (!geoRes.ok) {
-    throw new Error('Failed to geocode location.');
-  }
-
-  const geoJson = await geoRes.json();
-  const results: Array<{
-    name: string;
-    admin1?: string;
-    country_code?: string;
-    latitude: number;
-    longitude: number;
-  }> = geoJson.results || [];
-
-  if (results.length === 0) {
-    throw new Error(`Could not find location "${city}". Please enter a valid Indian city.`);
-  }
-
-  const match = results.find((r) => r.country_code === 'IN') || results[0];
-
-  const aqUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${match.latitude}&longitude=${match.longitude}&current=pm2_5,pm10,nitrogen_dioxide,ozone&timezone=Asia%2FKolkata`;
+async function fetchFromOpenMeteoCams(
+  lat: number,
+  lon: number,
+  resolvedCity: string,
+  resolvedState?: string
+): Promise<LiveAqiMetrics> {
+  const aqUrl = `https://air-quality-api.open-meteo.com/v1/air-quality?latitude=${lat}&longitude=${lon}&current=pm2_5,pm10,nitrogen_dioxide,ozone&timezone=Asia%2FKolkata`;
   const aqRes = await fetch(aqUrl, { cache: 'no-store', signal: AbortSignal.timeout(3500) });
   if (!aqRes.ok) {
     throw new Error('Live air quality service is temporarily unavailable.');
@@ -152,8 +229,8 @@ async function fetchFromOpenMeteo(city: string): Promise<LiveAqiMetrics> {
   const { aqi, primaryPollutant } = computeNaqi(pm25, pm10);
 
   return {
-    city: match.name,
-    stationName: match.admin1 ? `${match.name}, ${match.admin1}` : match.name,
+    city: resolvedCity,
+    stationName: resolvedState ? `${resolvedCity}, ${resolvedState}` : resolvedCity,
     aqi,
     category: getIndianAqiCategory(aqi),
     pm25,
@@ -165,29 +242,67 @@ async function fetchFromOpenMeteo(city: string): Promise<LiveAqiMetrics> {
   };
 }
 
-export async function getLiveAqiForCity(rawCity: string): Promise<LiveAqiMetrics> {
-  const normalizedKey = rawCity.trim().toLowerCase();
-  const cached = aqiCache.get(normalizedKey);
-  if (cached && cached.expiresAt > Date.now()) {
-    return cached.data;
+export async function getLiveAqiForCity(
+  rawCity: string,
+  latitude?: number,
+  longitude?: number
+): Promise<LiveAqiMetrics> {
+  const normalizedCity = rawCity.trim().toLowerCase();
+  const coordKey =
+    typeof latitude === 'number' && typeof longitude === 'number'
+      ? `geo:${latitude.toFixed(4)},${longitude.toFixed(4)}`
+      : null;
+
+  const cachedByCity = aqiCache.get(normalizedCity);
+  if (cachedByCity && cachedByCity.expiresAt > Date.now()) {
+    return cachedByCity.data;
   }
+
+  if (coordKey) {
+    const cachedByCoord = aqiCache.get(coordKey);
+    if (cachedByCoord && cachedByCoord.expiresAt > Date.now()) {
+      return cachedByCoord.data;
+    }
+  }
+
+  // 1. Resolve Indian location coordinates
+  const location = await resolveIndianLocation(rawCity, latitude, longitude);
 
   let metrics: LiveAqiMetrics | null = null;
   const waqiToken = process.env.WAQI_API_TOKEN;
 
+  // 2. Query WAQI by geo-coordinates if token is present
   if (waqiToken) {
-    metrics = await fetchFromWaqi(rawCity.trim(), waqiToken).catch(() => null);
+    metrics = await fetchFromWaqiGeo(
+      location.latitude,
+      location.longitude,
+      location.name,
+      waqiToken
+    ).catch(() => null);
   }
 
+  // 3. Strict Fallback: If WAQI failed or nearest station was > 50km, fetch Open-Meteo CAMS
   if (!metrics) {
-    metrics = await fetchFromOpenMeteo(rawCity.trim());
+    metrics = await fetchFromOpenMeteoCams(
+      location.latitude,
+      location.longitude,
+      location.name,
+      location.state
+    );
   }
 
+  // Manage cache capacity
   if (aqiCache.size >= MAX_CACHE_SIZE) {
     const oldestKey = aqiCache.keys().next().value;
     if (oldestKey) aqiCache.delete(oldestKey);
   }
 
-  aqiCache.set(normalizedKey, { data: metrics, expiresAt: Date.now() + CACHE_TTL_MS });
+  const cacheEntry = { data: metrics, expiresAt: Date.now() + CACHE_TTL_MS };
+  aqiCache.set(normalizedCity, cacheEntry);
+  aqiCache.set(
+    `geo:${location.latitude.toFixed(4)},${location.longitude.toFixed(4)}`,
+    cacheEntry
+  );
+
   return metrics;
 }

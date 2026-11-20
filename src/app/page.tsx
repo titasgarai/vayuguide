@@ -38,6 +38,7 @@ export default function HomePage() {
       const data: AssistantResponse = await res.json();
       setResult(data);
     } catch (err) {
+      setResult(null); // Clean state reset: clear stale previous results on failure
       setError(err instanceof Error ? err.message : 'Unexpected error occurred.');
     } finally {
       setIsLoading(false);

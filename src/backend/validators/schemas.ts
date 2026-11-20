@@ -4,6 +4,8 @@ export const PersonaEnum = z.enum(['commuter', 'parent', 'senior', 'student']);
 
 export const AnalyzeRequestSchema = z.object({
   city: z.string().trim().min(2, 'Please enter a valid city name.').max(80),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
   persona: PersonaEnum,
   hasAirPurifier: z.boolean().default(false),
   plannedActivity: z.string().trim().max(200).optional().default(''),
@@ -17,6 +19,8 @@ export const PersonaSlotSchema = z.object({
 
 export const CompareRequestSchema = z.object({
   city: z.string().trim().min(2, 'Please enter a valid city name.').max(80),
+  latitude: z.number().min(-90).max(90).optional(),
+  longitude: z.number().min(-180).max(180).optional(),
   profileA: PersonaSlotSchema,
   profileB: PersonaSlotSchema,
 });
@@ -54,4 +58,3 @@ export const AiGuidanceSchema = z.object({
     .max(5),
   data_attribution: z.string().default(''),
 });
-

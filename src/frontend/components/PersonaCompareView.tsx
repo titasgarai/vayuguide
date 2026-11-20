@@ -1,9 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertCircle, ArrowLeftRight, Home, Leaf, MapPin, Moon, Sun, Sunrise } from 'lucide-react';
+import { AlertCircle, ArrowLeftRight, Home, Leaf, Moon, Sun, Sunrise } from 'lucide-react';
 import { AiGuidance, CompareResponse, PersonaSlotInput, PersonaType } from '@/shared/types/aqi';
 import { LiveAqiCard } from '@/frontend/components/LiveAqiCard';
+import { CityAutocomplete } from '@/frontend/components/CityAutocomplete';
 
 const PERSONA_LABELS: Record<PersonaType, string> = {
   parent: 'Parent with Children',
@@ -102,6 +103,9 @@ function PersonaColumn({
 
 export function PersonaCompareView() {
   const [city, setCity] = useState('Delhi');
+  const [latitude, setLatitude] = useState<number | undefined>(undefined);
+  const [longitude, setLongitude] = useState<number | undefined>(undefined);
+
   const [profileA, setProfileA] = useState<PersonaSlotInput>({
     persona: 'parent',
     hasAirPurifier: false,
@@ -124,7 +128,7 @@ export function PersonaCompareView() {
       const res = await fetch('/api/compare', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ city, profileA, profileB }),
+        body: JSON.stringify({ city, latitude, longitude, profileA, profileB }),
       });
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
@@ -133,6 +137,7 @@ export function PersonaCompareView() {
       const data: CompareResponse = await res.json();
       setResult(data);
     } catch (err) {
+      setResult(null); // Clean state reset: wipe previous results on failure
       setError(err instanceof Error ? err.message : 'Unexpected error occurred.');
     } finally {
       setIsLoading(false);
@@ -145,25 +150,19 @@ export function PersonaCompareView() {
         onSubmit={handleCompare}
         className="space-y-5 rounded-2xl border border-hairline bg-surface p-5 shadow-sm sm:p-6"
       >
-        <div>
-          <label htmlFor="compare-city" className="mb-1.5 block text-sm font-semibold text-ink">
-            Shared Indian City
-          </label>
-          <div className="relative max-w-md">
-            <MapPin
-              className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-ink/45"
-              aria-hidden="true"
-            />
-            <input
-              id="compare-city"
-              type="text"
-              required
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              placeholder="e.g., Delhi, Kolkata, Mumbai, Noida"
-              className="w-full rounded-xl border border-hairline bg-canvas/50 py-2.5 pl-9 pr-3 text-sm text-ink focus:border-forest focus:bg-surface focus:outline-none focus:ring-2 focus:ring-forest/20"
-            />
-          </div>
+        <div className="max-w-md">
+          <CityAutocomplete
+            id="compare-city"
+            label="Shared Indian City"
+            value={city}
+            disabled={isLoading}
+            required
+            onSelectCity={(selection) => {
+              setCity(selection.city);
+              setLatitude(selection.latitude);
+              setLongitude(selection.longitude);
+            }}
+          />
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -276,4 +275,3 @@ export function PersonaCompareView() {
     </section>
   );
 }
-

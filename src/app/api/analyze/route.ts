@@ -56,7 +56,7 @@ export async function POST(request: Request) {
     }
 
     const profile = parsed.data;
-    const metrics = await getLiveAqiForCity(profile.city);
+    const metrics = await getLiveAqiForCity(profile.city, profile.latitude, profile.longitude);
     const guidance = await generatePersonalizedGuidance(metrics, profile);
 
     const payload: AssistantResponse = { metrics, guidance };
@@ -65,7 +65,7 @@ export async function POST(request: Request) {
     console.error('[Analyze API Error]:', error);
     const message = error instanceof Error ? error.message : '';
 
-    if (message.includes('Could not find location')) {
+    if (message.includes('Could not find location') || message.includes('valid Indian city')) {
       return NextResponse.json({ error: message }, { status: 404 });
     }
 

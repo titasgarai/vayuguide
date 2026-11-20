@@ -122,16 +122,16 @@ flowchart LR
 vayuguide/
 ├── .github/workflows/verify.yml          # CI: ESLint, TypeScript, Vitest, Production Build
 ├── docs/                                 # Engineering plan, agent rules, design tokens, asset guide
-├── scripts/                              # Automated 6-point live endpoint smoke test
+├── scripts/                              # Automated live endpoint smoke test & secret audit
 ├── src/
-│   ├── app/                              # Next.js 15 App Router pages & thin API routes (maxDuration = 60)
+│   ├── app/                              # Next.js 15 App Router pages, /api/cities, /api/analyze, /api/compare
 │   ├── backend/
-│   │   ├── services/aqi.service.ts       # Dual-source WAQI/Open-Meteo pipeline + 15-min cache + CPCB NAQI
+│   │   ├── services/aqi.service.ts       # Coordinate-first WAQI (50km proximity guard) + Open-Meteo CAMS fallback
 │   │   ├── services/gemini.service.ts    # Gemini 3.5 Flash-Lite client with strict responseSchema JSON output
-│   │   └── validators/schemas.ts         # Zod runtime payload schemas
-│   ├── frontend/components/              # Editorial UI components (pangram.com-inspired design system)
+│   │   └── validators/schemas.ts         # Zod runtime payload schemas with latitude/longitude
+│   ├── frontend/components/              # Editorial UI components with Pan-India CityAutocomplete Dropdown
 │   └── shared/types/aqi.ts               # Shared TypeScript contracts
-└── tests/                                # Vitest unit & route handler tests (aqi.test.ts, compare.test.ts)
+└── tests/                                # Vitest unit & route handler tests (17 passing tests)
 ```
 
 </details>
@@ -140,16 +140,18 @@ vayuguide/
 
 ## ✅ Live Verification Snapshot
 
-All **11 unit tests** (`npm run verify`) and **6 live production smoke checks** (`npm run smoke -- https://vayuguide.vercel.app`) pass:
+All **17 unit tests** (`npm run verify`) and **8 live production smoke checks** (`npm run smoke -- https://vayuguide.vercel.app`) pass:
 
 | Check | Endpoint | Live Verified Result | Status |
 | :--- | :--- | :--- | :---: |
 | **UI Reachability** | `GET /` | Renders `VayuGuide` editorial interface (`HTTP 200`) | PASS |
-| **Delhi (Parent)** | `POST /api/analyze` | `NAQI 340 (Very Poor)` · WAQI / CPCB Live Station Feed · IST | PASS |
-| **Kolkata (Commuter)** | `POST /api/analyze` | `NAQI 64 (Satisfactory)` · WAQI / CPCB Live Station Feed · IST | PASS |
-| **Malda (Fallback)** | `POST /api/analyze` | `NAQI 79 (Satisfactory)` · Open-Meteo CAMS Fallback · IST | PASS |
-| **Persona Compare** | `POST /api/compare` | Shared `Delhi NAQI 340` · Distinct Parent vs. Commuter plans | PASS |
+| **Pan-India Autocomplete** | `GET /api/cities?q=Malda` | Resolves `Malda, West Bengal (25.0045, 88.1457)` | PASS |
+| **Delhi (Parent)** | `POST /api/analyze` | `NAQI ~300+` · WAQI / CPCB Live Station Feed · IST | PASS |
+| **Kolkata (Commuter)** | `POST /api/analyze` | `NAQI ~70-150` · WAQI / CPCB Live Station Feed · IST | PASS |
+| **Malda (50km Guard)** | `POST /api/analyze` | Resolved `Malda, West Bengal` · Open-Meteo CAMS Fallback · IST | PASS |
+| **Persona Compare** | `POST /api/compare` | Shared `Delhi NAQI` · Distinct Parent vs. Commuter plans in parallel | PASS |
 | **Zod Input Guard** | `POST /api/analyze` | Rejects invalid persona enum with clean `HTTP 400` | PASS |
+| **Location 404 Guard** | `POST /api/analyze` | Rejects non-existent cities with clean `HTTP 404` (never Delhi) | PASS |
 
 ---
 

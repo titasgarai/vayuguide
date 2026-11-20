@@ -1,7 +1,8 @@
 'use client';
 
-import { MapPin, Search, UserCheck } from 'lucide-react';
+import { Search, UserCheck } from 'lucide-react';
 import { PersonaType, UserProfile } from '@/shared/types/aqi';
+import { CityAutocomplete } from '@/frontend/components/CityAutocomplete';
 
 interface LocationProfileFormProps {
   profile: UserProfile;
@@ -29,26 +30,21 @@ export function LocationProfileForm({
       className="space-y-5 rounded-2xl border border-hairline bg-surface p-5 shadow-sm sm:p-6"
     >
       <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <label htmlFor="city-input" className="mb-1.5 block text-sm font-semibold text-ink">
-            Indian City or Locality
-          </label>
-          <div className="relative">
-            <MapPin
-              className="pointer-events-none absolute left-3 top-3 h-4 w-4 text-ink/45"
-              aria-hidden="true"
-            />
-            <input
-              id="city-input"
-              type="text"
-              required
-              value={profile.city}
-              onChange={(e) => onChange({ ...profile, city: e.target.value })}
-              placeholder="e.g., Delhi, Kolkata, Bengaluru, Noida"
-              className="w-full rounded-xl border border-hairline bg-canvas/50 py-2.5 pl-9 pr-3 text-sm text-ink placeholder:text-ink/45 focus:border-forest focus:bg-surface focus:outline-none focus:ring-2 focus:ring-forest/20"
-            />
-          </div>
-        </div>
+        <CityAutocomplete
+          id="city-input"
+          label="Indian City or Locality"
+          value={profile.city}
+          disabled={isLoading}
+          required
+          onSelectCity={(selection) => {
+            onChange({
+              ...profile,
+              city: selection.city,
+              latitude: selection.latitude,
+              longitude: selection.longitude,
+            });
+          }}
+        />
 
         <div>
           <label htmlFor="activity-input" className="mb-1.5 block text-sm font-semibold text-ink">
@@ -101,7 +97,7 @@ export function LocationProfileForm({
             onChange={(e) => onChange({ ...profile, hasAirPurifier: e.target.checked })}
             className="h-4 w-4 rounded border-hairline text-forest focus:ring-forest"
           />
-          <span>I have an indoor HEPA air purifier at home</span>
+          <span>Indoor HEPA air purifier available</span>
         </label>
 
         <button
@@ -110,10 +106,9 @@ export function LocationProfileForm({
           className="inline-flex items-center gap-2 rounded-xl bg-forest px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-pine focus:outline-none focus:ring-2 focus:ring-forest/50 disabled:cursor-not-allowed disabled:opacity-50"
         >
           <Search className="h-4 w-4" aria-hidden="true" />
-          <span>{isLoading ? 'Analyzing Live Air Data...' : 'Get Personalized Plan'}</span>
+          <span>{isLoading ? 'Fetching Telemetry...' : 'Generate Personalized Plan'}</span>
         </button>
       </div>
     </form>
   );
 }
-

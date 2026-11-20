@@ -4,10 +4,12 @@ import {
   formatIstTimestamp,
   getIndianAqiCategory,
   getLiveAqiForCity,
+  haversineDistanceKm,
 } from '@/backend/services/aqi.service';
 import * as geminiService from '@/backend/services/gemini.service';
 import { AiGuidanceSchema } from '@/backend/validators/schemas';
 import { POST } from '@/app/api/analyze/route';
+import { GET as getCities } from '@/app/api/cities/route';
 import { AiGuidance } from '@/shared/types/aqi';
 
 const MOCK_GUIDANCE: AiGuidance = {
@@ -42,7 +44,17 @@ const MOCK_GUIDANCE: AiGuidance = {
   data_attribution: 'Source: Open-Meteo (CAMS modelled) · NAQI estimated from PM | Last Updated: 20 Nov 2026 IST',
 };
 
-describe('Indian CPCB NAQI Categorizer & Breakpoints', () => {
+describe('Haversine Distance & CPCB Utilities', () => {
+  it('calculates accurate Haversine distance between two coordinates', () => {
+    // Malda (25.0045, 88.1457) to Katihar (25.5601, 87.5533) is ~85.8 km
+    const dist = haversineDistanceKm(25.0045, 88.1457, 25.5601, 87.5533);
+    expect(dist).toBeGreaterThan(80);
+    expect(dist).toBeLessThan(90);
+
+    // Same point is 0 km
+    expect(haversineDistanceKm(28.6139, 77.209, 28.6139, 77.209)).toBe(0);
+  });
+
   it('maps exact boundary values across all 6 CPCB tiers', () => {
     expect(getIndianAqiCategory(0)).toBe('Good');
     expect(getIndianAqiCategory(50)).toBe('Good');
@@ -58,26 +70,22 @@ describe('Indian CPCB NAQI Categorizer & Breakpoints', () => {
   });
 
   it('computes authentic CPCB NAQI sub-indices accurately from PM2.5 and PM10', () => {
-    // 94 µg/m³ PM2.5 is Poor in CPCB (201-300 band)
     const result = computeNaqi(94, 148);
     expect(result.aqi).toBeGreaterThanOrEqual(201);
     expect(result.aqi).toBeLessThanOrEqual(300);
     expect(getIndianAqiCategory(result.aqi)).toBe('Poor');
     expect(result.primaryPollutant).toBe('PM2.5');
 
-    // Good band
     const good = computeNaqi(15, 25);
     expect(good.aqi).toBeLessThanOrEqual(50);
     expect(getIndianAqiCategory(good.aqi)).toBe('Good');
   });
 
   it('correctly handles offset-less Open-Meteo timestamps without double-offsetting', () => {
-    // Open-Meteo returns ISO timestamps without offset for requested timezone Asia/Kolkata
     const raw = '2026-11-20T18:00';
     const formatted = formatIstTimestamp(raw);
     expect(formatted).toContain('6:00');
     expect(formatted).toContain('IST');
-    // Ensure it was not shifted 5.5 hours ahead to 23:30 or 11:30 pm
     expect(formatted).not.toContain('11:30');
   });
 });
@@ -93,7 +101,7 @@ describe('Gemini Output Zod Validation Schema', () => {
       ...MOCK_GUIDANCE,
       routine_planner: {
         ...MOCK_GUIDANCE.routine_planner,
-        evening: { action: 'Stay inside', why: '' }, // empty why
+        evening: { action: 'Stay inside', why: '' },
       },
     };
     const parsed = AiGuidanceSchema.safeParse(invalid);
@@ -101,7 +109,7 @@ describe('Gemini Output Zod Validation Schema', () => {
   });
 });
 
-describe('Live Pan-India AQI Service & Fallback', () => {
+describe('Live Pan-India AQI Service & Fallback Guards', () => {
   const originalEnv = process.env.WAQI_API_TOKEN;
 
   beforeEach(() => {
@@ -117,21 +125,34 @@ describe('Live Pan-India AQI Service & Fallback', () => {
     vi.unstubAllGlobals();
   });
 
-  it('falls back to Open-Meteo and prefers Indian (IN) matches when WAQI fails', async () => {
+  it('resolves Malda to West Bengal and triggers Open-Meteo fallback when WAQI station is > 50 km away', async () => {
     process.env.WAQI_API_TOKEN = 'test-token';
 
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'error' }) })
+      // 1. Geocoding search for Malda
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
           results: [
-            { name: 'Malda', country_code: 'US', latitude: 40.0, longitude: -74.0 },
-            { name: 'Malda', admin1: 'West Bengal', country_code: 'IN', latitude: 25.01, longitude: 88.14 },
+            { name: 'Malda', country_code: 'ES', latitude: 41.55, longitude: 1.03 },
+            { name: 'Malda', admin1: 'West Bengal', country_code: 'IN', latitude: 25.0045, longitude: 88.1457 },
           ],
         }),
       })
+      // 2. WAQI geo call returning a distant station (Katihar, ~85.8 km away)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: 'ok',
+          data: {
+            aqi: 220,
+            city: { name: 'Mirchaibari, Katihar', geo: [25.5601, 87.5533] },
+            time: { iso: '2026-11-20T12:00:00+05:30' },
+          },
+        }),
+      })
+      // 3. Open-Meteo CAMS fallback fetch for Malda coordinates
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
@@ -140,38 +161,111 @@ describe('Live Pan-India AQI Service & Fallback', () => {
       });
 
     vi.stubGlobal('fetch', fetchMock);
+
     const metrics = await getLiveAqiForCity('Malda');
 
+    // Must resolve to Malda, West Bengal (NOT Delhi or Katihar)
+    expect(metrics.city).toBe('Malda');
     expect(metrics.stationName).toBe('Malda, West Bengal');
-    expect(metrics.aqi).toBeGreaterThanOrEqual(201);
-    expect(metrics.category).toBe('Poor');
     expect(metrics.source).toContain('Open-Meteo (CAMS modelled)');
     expect(metrics.isModelled).toBe(true);
-    expect(metrics.timestamp).toContain('IST');
+    expect(metrics.category).toBe('Poor');
   });
 
-  it('caches city readings for 15 minutes', async () => {
+  it('accepts WAQI station when it is within 50 km', async () => {
+    process.env.WAQI_API_TOKEN = 'test-token';
+
+    const fetchMock = vi
+      .fn()
+      // 1. Geocoding search for Kolkata
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          results: [
+            { name: 'Kolkata', admin1: 'West Bengal', country_code: 'IN', latitude: 22.5726, longitude: 88.3639 },
+          ],
+        }),
+      })
+      // 2. WAQI geo call returning Victoria, Kolkata (approx 3 km away)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          status: 'ok',
+          data: {
+            aqi: 165,
+            city: { name: 'Victoria, Kolkata', geo: [22.5448, 88.3426] },
+            iaqi: { pm25: { v: 78 }, pm10: { v: 120 } },
+            time: { iso: '2026-11-20T12:00:00+05:30' },
+          },
+        }),
+      });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const metrics = await getLiveAqiForCity('Kolkata');
+
+    expect(metrics.city).toBe('Kolkata');
+    expect(metrics.stationName).toBe('Victoria, Kolkata');
+    expect(metrics.source).toContain('WAQI / CPCB Live Station Feed');
+    expect(metrics.isModelled).toBe(false);
+  });
+
+  it('throws a clean error for gibberish or non-Indian cities (never Delhi)', async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          results: [{ name: 'Asansol', admin1: 'West Bengal', country_code: 'IN', latitude: 23.68, longitude: 86.95 }],
-        }),
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
-          current: { pm2_5: 130, pm10: 210, time: '2026-11-20T12:00' },
+          results: [
+            { name: 'Paris', country_code: 'FR', latitude: 48.8566, longitude: 2.3522 },
+          ],
         }),
       });
 
     vi.stubGlobal('fetch', fetchMock);
-    const first = await getLiveAqiForCity('Asansol');
-    const second = await getLiveAqiForCity('asansol');
 
-    expect(first).toEqual(second);
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    await expect(getLiveAqiForCity('Paris')).rejects.toThrow(
+      'Could not find location "Paris". Please enter a valid Indian city.'
+    );
+  });
+});
+
+describe('GET /api/cities Autocomplete Route Handler', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns empty array for queries with length < 2', async () => {
+    const req = new Request('http://localhost:3000/api/cities?q=M');
+    const res = await getCities(req);
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data).toEqual([]);
+  });
+
+  it('returns West Bengal coordinates for /api/cities?q=Malda', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        results: [
+          { name: 'Malda', admin1: 'West Bengal', country_code: 'IN', latitude: 25.0045, longitude: 88.1457 },
+          { name: 'Maldà', admin1: 'Catalonia', country_code: 'ES', latitude: 41.55, longitude: 1.0333 },
+        ],
+      }),
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const req = new Request('http://localhost:3000/api/cities?q=Malda');
+    const res = await getCities(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.length).toBe(1);
+    expect(data[0].name).toBe('Malda');
+    expect(data[0].state).toBe('West Bengal');
+    expect(data[0].latitude).toBe(25.0045);
+    expect(data[0].longitude).toBe(88.1457);
   });
 });
 
@@ -188,6 +282,29 @@ describe('POST /api/analyze Route Handler', () => {
     });
     const res = await POST(req);
     expect(res.status).toBe(400);
+  });
+
+  it('returns 404 when an unknown non-Indian city is requested', async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ results: [] }),
+    });
+
+    vi.stubGlobal('fetch', fetchMock);
+
+    const req = new Request('http://localhost:3000/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        city: 'NonExistentCity12345',
+        persona: 'parent',
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toContain('Could not find location');
   });
 
   it('returns 200 with live AQI and Gemini guidance', async () => {

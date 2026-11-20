@@ -68,6 +68,21 @@ const analyzeValidator = (raw) => {
   return `NAQI ${d.metrics.aqi} (${d.metrics.category}) | ${d.metrics.source} | ${d.metrics.timestamp}`;
 };
 
+const maldaValidator = (raw) => {
+  const d = JSON.parse(raw);
+  if (typeof d.metrics?.aqi !== 'number') throw new Error('Missing numeric AQI');
+  if (!String(d.metrics?.timestamp || '').includes('IST')) throw new Error('Missing IST timestamp');
+  if (!d.guidance?.routine_planner?.evening?.why) throw new Error('Missing why justification');
+  const cityStation = `${d.metrics.city} ${d.metrics.stationName}`;
+  if (!cityStation.includes('Malda') && !cityStation.includes('West Bengal')) {
+    throw new Error(`Expected Malda or West Bengal in telemetry, got: ${cityStation}`);
+  }
+  if (cityStation.includes('Delhi')) {
+    throw new Error(`Leaked Delhi data into Malda telemetry: ${cityStation}`);
+  }
+  return `Resolved: ${d.metrics.city} (${d.metrics.stationName}) | NAQI ${d.metrics.aqi} | ${d.metrics.source}`;
+};
+
 const compareValidator = (raw) => {
   const d = JSON.parse(raw);
   if (d.guidanceA.headline_summary.trim() === d.guidanceB.headline_summary.trim()) {
@@ -86,6 +101,23 @@ async function main() {
     (text) => {
       if (!text.includes('VayuGuide')) throw new Error('Missing title');
       return 'OK';
+    }
+  );
+
+  await sleep(1500);
+
+  await runCheck(
+    '/api/cities — Autocomplete Pan-India (Malda)',
+    'GET',
+    '/api/cities?q=Malda',
+    '',
+    200,
+    (text) => {
+      const list = JSON.parse(text);
+      if (!Array.isArray(list) || list.length === 0) throw new Error('No suggestions returned');
+      const malda = list.find((item) => item.name.includes('Malda') || item.state.includes('West Bengal'));
+      if (!malda) throw new Error('Malda, West Bengal not found in suggestions');
+      return `Found ${list.length} suggestions, top match: ${malda.name}, ${malda.state} (${malda.latitude}, ${malda.longitude})`;
     }
   );
 
@@ -124,7 +156,7 @@ async function main() {
   await sleep(3500);
 
   await runCheck(
-    '/api/analyze — Malda (Pan-India Fallback)',
+    '/api/analyze — Malda (Pan-India 50km Guard & West Bengal Telemetry)',
     'POST',
     '/api/analyze',
     JSON.stringify({
@@ -134,7 +166,7 @@ async function main() {
       plannedActivity: 'Early morning walk at 6:30 AM',
     }),
     200,
-    analyzeValidator
+    maldaValidator
   );
 
   await sleep(3500);
@@ -160,7 +192,7 @@ async function main() {
     compareValidator
   );
 
-  await sleep(1000);
+  await sleep(1500);
 
   await runCheck(
     '/api/analyze — Zod 400 Guard',
@@ -178,7 +210,25 @@ async function main() {
     }
   );
 
-  console.log(`Summary: ${pass} passed, ${fail} failed`);
+  await sleep(1000);
+
+  await runCheck(
+    '/api/analyze — Non-Existent City 404 Guard',
+    'POST',
+    '/api/analyze',
+    JSON.stringify({
+      city: 'FakeCityDoesNotExist99999',
+      persona: 'student',
+    }),
+    404,
+    (text) => {
+      const d = JSON.parse(text);
+      if (!d.error) throw new Error('Missing error');
+      return d.error;
+    }
+  );
+
+  console.log(`\nSmoke Test Summary: ${pass} passed, ${fail} failed`);
   if (fail > 0) {
     process.exit(1);
   }

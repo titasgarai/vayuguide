@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import * as aqiService from '@/backend/services/aqi.service';
 import * as geminiService from '@/backend/services/gemini.service';
 import { POST } from '@/app/api/compare/route';
-import { AiGuidance, CompareResponse, LiveAqiMetrics } from '@/shared/types/aqi';
+import { AiGuidance, LiveAqiMetrics } from '@/shared/types/aqi';
 
 const MOCK_METRICS: LiveAqiMetrics = {
   city: 'Delhi',
@@ -90,6 +90,8 @@ describe('POST /api/compare Route Handler', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         city: 'Delhi',
+        latitude: 28.6139,
+        longitude: 77.209,
         profileA: {
           persona: 'parent',
           hasAirPurifier: false,
@@ -98,34 +100,57 @@ describe('POST /api/compare Route Handler', () => {
         profileB: {
           persona: 'commuter',
           hasAirPurifier: true,
-          plannedActivity: 'Office commute by two-wheeler',
+          plannedActivity: 'Morning commute via metro',
         },
       }),
     });
 
     const res = await POST(req);
-    const body = (await res.json()) as CompareResponse;
+    const body = await res.json();
 
     expect(res.status).toBe(200);
     expect(aqiSpy).toHaveBeenCalledTimes(1);
     expect(geminiSpy).toHaveBeenCalledTimes(2);
     expect(peakConcurrency).toBe(2);
+
+    expect(body.metrics.city).toBe('Delhi');
     expect(body.guidanceA.headline_summary).toContain('children');
-    expect(body.guidanceB.headline_summary).toContain('commute');
+    expect(body.guidanceB.headline_summary).toContain('transit');
   });
 
-  it('returns 400 when persona is invalid', async () => {
+  it('rejects invalid persona slots with 400', async () => {
     const req = new Request('http://localhost:3000/api/compare', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         city: 'Delhi',
-        profileA: { persona: 'parent', hasAirPurifier: false },
-        profileB: { persona: 'invalid_role', hasAirPurifier: false },
+        profileA: { persona: 'invalid_role' },
+        profileB: { persona: 'commuter' },
       }),
     });
+
     const res = await POST(req);
     expect(res.status).toBe(400);
   });
-});
 
+  it('returns 404 when city is not found in India', async () => {
+    vi.spyOn(aqiService, 'getLiveAqiForCity').mockRejectedValueOnce(
+      new Error('Could not find location "NowhereLand". Please enter a valid Indian city.')
+    );
+
+    const req = new Request('http://localhost:3000/api/compare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        city: 'NowhereLand',
+        profileA: { persona: 'parent' },
+        profileB: { persona: 'commuter' },
+      }),
+    });
+
+    const res = await POST(req);
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toContain('Could not find location');
+  });
+});
