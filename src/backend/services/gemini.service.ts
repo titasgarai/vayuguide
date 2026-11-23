@@ -81,6 +81,42 @@ function sleep(ms: number) {
 }
 
 /**
+ * Wraps an asynchronous operation in a single-retry handler for transient network/rate limits.
+ */
+async function callGeminiWithRetry<T>(
+  fn: () => Promise<T>,
+  maxAttempts = 2,
+  delayMs = 800
+): Promise<T> {
+  let lastError: unknown = null;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await fn();
+    } catch (err: unknown) {
+      lastError = err;
+      const errMsg = String(err);
+      const isTransient =
+        errMsg.includes('429') ||
+        errMsg.includes('500') ||
+        errMsg.includes('503') ||
+        errMsg.includes('UNAVAILABLE') ||
+        errMsg.includes('RESOURCE_EXHAUSTED') ||
+        errMsg.includes('Quota exceeded') ||
+        errMsg.includes('rate limit') ||
+        errMsg.includes('fetch failed') ||
+        errMsg.includes('network');
+
+      if (isTransient && attempt < maxAttempts) {
+        await sleep(delayMs);
+        continue;
+      }
+      throw err;
+    }
+  }
+  throw lastError;
+}
+
+/**
  * Generates scientifically grounded, persona-adapted daily routine guidance and indoor hacks
  * using the Gemini API with structured JSON output schema and exponential backoff retry.
  *
@@ -134,10 +170,9 @@ Provide 3 specific indoor_air_hacks and 3 specific sustainable_alternatives with
   let lastError: unknown = null;
 
   for (const model of modelsToTry) {
-    // Retry up to 3 times with exponential backoff for 429/503 temporary demand spikes
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const response = await ai.models.generateContent({
+    try {
+      const response = await callGeminiWithRetry(async () => {
+        return await ai.models.generateContent({
           model,
           contents: prompt,
           config: {
@@ -147,39 +182,23 @@ Provide 3 specific indoor_air_hacks and 3 specific sustainable_alternatives with
             temperature: 0.3,
           },
         });
+      }, 2, 800);
 
-        const text = response.text;
-        if (!text) {
-          throw new Error('Empty response received from Gemini API.');
-        }
-
-        const rawJson = JSON.parse(text);
-        const validated = AiGuidanceSchema.parse(rawJson);
-
-        // Server-side authoritative data attribution
-        validated.data_attribution = `Source: ${metrics.source} | Last Updated: ${metrics.timestamp}`;
-
-        return validated;
-      } catch (err: unknown) {
-        lastError = err;
-        const errMsg = String(err);
-        const isRateOrDemandLimit =
-          errMsg.includes('429') ||
-          errMsg.includes('503') ||
-          errMsg.includes('high demand') ||
-          errMsg.includes('UNAVAILABLE') ||
-          errMsg.includes('RESOURCE_EXHAUSTED') ||
-          errMsg.includes('Quota exceeded') ||
-          errMsg.includes('rate limit');
-
-        if (isRateOrDemandLimit && attempt < 2) {
-          const delay = (attempt + 1) * 3000;
-          console.warn(`[Gemini API] Temporary demand/rate limit on ${model}, backing off ${delay}ms...`);
-          await sleep(delay);
-          continue;
-        }
-        break; // Switch to next candidate model
+      const text = response.text;
+      if (!text) {
+        throw new Error('Empty response received from Gemini API.');
       }
+
+      const rawJson = JSON.parse(text);
+      const validated = AiGuidanceSchema.parse(rawJson);
+
+      // Server-side authoritative data attribution
+      validated.data_attribution = `Source: ${metrics.source} | Last Updated: ${metrics.timestamp}`;
+
+      return validated;
+    } catch (err: unknown) {
+      lastError = err;
+      // Switch to next candidate model if available
     }
   }
 
