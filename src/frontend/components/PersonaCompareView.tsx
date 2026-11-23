@@ -1,105 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertCircle, ArrowLeftRight, Home, Leaf, Moon, Sun, Sunrise } from 'lucide-react';
-import { AiGuidance, CompareResponse, PersonaSlotInput, PersonaType } from '@/shared/types/aqi';
+import { AlertCircle, ArrowLeftRight } from 'lucide-react';
+import { CompareResponse, PersonaSlotInput } from '@/shared/types/aqi';
 import { LiveAqiCard } from '@/frontend/components/LiveAqiCard';
 import { CityAutocomplete } from '@/frontend/components/CityAutocomplete';
-
-const PERSONA_LABELS: Record<PersonaType, string> = {
-  parent: 'Parent with Children',
-  commuter: 'Daily Commuter',
-  senior: 'Senior Citizen',
-  student: 'Student / Athlete',
-};
-
-function PersonaColumn({
-  badge,
-  slot,
-  guidance,
-}: {
-  badge: string;
-  slot: PersonaSlotInput;
-  guidance: AiGuidance;
-}) {
-  const routineSlots = [
-    { key: 'morning', label: 'Morning', icon: Sunrise, data: guidance.routine_planner.morning },
-    { key: 'afternoon', label: 'Afternoon', icon: Sun, data: guidance.routine_planner.afternoon },
-    { key: 'evening', label: 'Evening', icon: Moon, data: guidance.routine_planner.evening },
-  ];
-
-  return (
-    <article className="flex flex-col space-y-4 rounded-2xl border border-hairline bg-surface p-5 shadow-sm">
-      <header className="border-b border-hairline pb-3.5">
-        <div className="flex items-center justify-between gap-2">
-          <span className="font-mono text-[11px] font-medium uppercase tracking-wider text-forest">
-            {badge} · {slot.hasAirPurifier ? 'HEPA Purifier' : 'No Purifier'}
-          </span>
-          <span className="rounded-lg border border-hairline bg-subtle px-2.5 py-0.5 font-mono text-[11px] font-semibold text-ink">
-            Risk: {guidance.risk_level}
-          </span>
-        </div>
-        <h3 className="mt-1 font-serif text-2xl text-ink">{PERSONA_LABELS[slot.persona]}</h3>
-        <p className="mt-1.5 text-sm leading-relaxed text-ink/80">{guidance.headline_summary}</p>
-      </header>
-
-      <div className="space-y-2.5">
-        <h4 className="font-mono text-[11px] font-semibold uppercase tracking-wider text-ink/60">
-          Daily Routine
-        </h4>
-        {routineSlots.map(({ key, label, icon: Icon, data }) => (
-          <div key={key} className="rounded-xl border border-hairline bg-canvas/60 p-3.5">
-            <div className="mb-1 flex items-center gap-1.5 font-mono text-[11px] font-medium uppercase text-forest">
-              <Icon className="h-3.5 w-3.5" aria-hidden="true" />
-              <span>{label}</span>
-            </div>
-            <p className="text-sm font-medium text-ink">{data.action}</p>
-            <p className="mt-1.5 rounded-lg bg-subtle p-2.5 text-xs text-ink/80">
-              <strong className="text-ink">Why:</strong> {data.why}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      <div className="space-y-2">
-        <h4 className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-pine">
-          <Home className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>Indoor Air Hacks</span>
-        </h4>
-        <ul className="space-y-2">
-          {guidance.indoor_air_hacks.map((item, idx) => (
-            <li key={idx} className="rounded-xl border border-hairline bg-subtle p-3 text-xs">
-              <p className="font-semibold text-ink">{item.hack}</p>
-              <p className="mt-1 text-ink/80">
-                <strong className="text-pine">Why:</strong> {item.why}
-              </p>
-            </li>
-          ))}
-        </ul>
-      </div>
-
-      <div className="space-y-2">
-        <h4 className="flex items-center gap-1.5 font-mono text-[11px] font-semibold uppercase tracking-wider text-forest">
-          <Leaf className="h-3.5 w-3.5" aria-hidden="true" />
-          <span>Sustainable Swaps</span>
-        </h4>
-        <ul className="space-y-2">
-          {guidance.sustainable_alternatives.map((item, idx) => (
-            <li
-              key={idx}
-              className="rounded-xl border border-tint-border bg-tint/70 p-3 text-xs"
-            >
-              <p className="font-semibold text-ink">{item.swap}</p>
-              <p className="mt-1 text-ink/85">
-                <strong className="text-forest">Direct Impact:</strong> {item.direct_impact}
-              </p>
-            </li>
-          ))}
-        </ul>
-      </div>
-    </article>
-  );
-}
+import { PERSONA_LABELS, PersonaColumn } from '@/frontend/components/PersonaColumn';
+import { ProfileFields } from '@/frontend/components/ProfileFields';
 
 export function PersonaCompareView() {
   const [city, setCity] = useState('Delhi');
@@ -137,7 +44,7 @@ export function PersonaCompareView() {
       const data: CompareResponse = await res.json();
       setResult(data);
     } catch (err) {
-      setResult(null); // Clean state reset: wipe previous results on failure
+      setResult(null); // Clean state reset on failure
       setError(err instanceof Error ? err.message : 'Unexpected error occurred.');
     } finally {
       setIsLoading(false);
@@ -177,53 +84,12 @@ export function PersonaCompareView() {
               <legend className="px-1 font-mono text-xs font-semibold uppercase tracking-wider text-forest">
                 {label}
               </legend>
-
-              <div>
-                <label
-                  htmlFor={`persona-${id}`}
-                  className="mb-1 block text-xs font-semibold text-ink"
-                >
-                  Profile
-                </label>
-                <select
-                  id={`persona-${id}`}
-                  value={state.persona}
-                  onChange={(e) => setter({ ...state, persona: e.target.value as PersonaType })}
-                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:border-forest focus:outline-none focus:ring-2 focus:ring-forest/20"
-                >
-                  {Object.entries(PERSONA_LABELS).map(([val, text]) => (
-                    <option key={val} value={val}>
-                      {text}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label
-                  htmlFor={`activity-${id}`}
-                  className="mb-1 block text-xs font-semibold text-ink"
-                >
-                  Planned Activity
-                </label>
-                <input
-                  id={`activity-${id}`}
-                  type="text"
-                  value={state.plannedActivity}
-                  onChange={(e) => setter({ ...state, plannedActivity: e.target.value })}
-                  className="w-full rounded-lg border border-hairline bg-surface px-3 py-2 text-sm text-ink focus:border-forest focus:outline-none focus:ring-2 focus:ring-forest/20"
-                />
-              </div>
-
-              <label className="inline-flex cursor-pointer items-center gap-2 text-xs text-ink/85">
-                <input
-                  type="checkbox"
-                  checked={state.hasAirPurifier}
-                  onChange={(e) => setter({ ...state, hasAirPurifier: e.target.checked })}
-                  className="h-4 w-4 rounded border-hairline text-forest focus:ring-forest"
-                />
-                <span>Has indoor HEPA air purifier</span>
-              </label>
+              <ProfileFields
+                value={state}
+                disabled={isLoading}
+                variant="select"
+                onChange={setter}
+              />
             </fieldset>
           ))}
         </div>
@@ -232,7 +98,7 @@ export function PersonaCompareView() {
           <button
             type="submit"
             disabled={isLoading || !city.trim()}
-            className="inline-flex items-center gap-2 rounded-xl bg-forest px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-pine focus:outline-none focus:ring-2 focus:ring-forest/50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-forest px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-pine focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15502E] focus-visible:ring-offset-1 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <ArrowLeftRight className="h-4 w-4" aria-hidden="true" />
             <span>{isLoading ? 'Comparing Live Plans...' : 'Compare Side-by-Side'}</span>
@@ -243,6 +109,7 @@ export function PersonaCompareView() {
       {error && (
         <div
           role="alert"
+          aria-live="assertive"
           className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
         >
           <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -261,7 +128,7 @@ export function PersonaCompareView() {
       )}
 
       {!isLoading && result && (
-        <div className="space-y-6">
+        <div className="space-y-6" aria-live="polite">
           <LiveAqiCard
             metrics={result.metrics}
             headline={`Comparing live air quality guidance for ${PERSONA_LABELS[result.profileA.persona]} vs. ${PERSONA_LABELS[result.profileB.persona]} using identical station telemetry.`}

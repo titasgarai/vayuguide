@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 import { AssistantResponse, UserProfile } from '@/shared/types/aqi';
 import { EvaluatorPresetBar } from '@/frontend/components/EvaluatorPresetBar';
@@ -22,6 +22,39 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const singleTabRef = useRef<HTMLButtonElement>(null);
+  const compareTabRef = useRef<HTMLButtonElement>(null);
+
+  function handleTabKeyDown(e: React.KeyboardEvent) {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (mode === 'single') {
+        setMode('compare');
+        compareTabRef.current?.focus();
+      } else {
+        setMode('single');
+        singleTabRef.current?.focus();
+      }
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (mode === 'compare') {
+        setMode('single');
+        singleTabRef.current?.focus();
+      } else {
+        setMode('compare');
+        compareTabRef.current?.focus();
+      }
+    } else if (e.key === 'Home') {
+      e.preventDefault();
+      setMode('single');
+      singleTabRef.current?.focus();
+    } else if (e.key === 'End') {
+      e.preventDefault();
+      setMode('compare');
+      compareTabRef.current?.focus();
+    }
+  }
+
   async function fetchGuidance(targetProfile: UserProfile) {
     setIsLoading(true);
     setError(null);
@@ -38,7 +71,7 @@ export default function HomePage() {
       const data: AssistantResponse = await res.json();
       setResult(data);
     } catch (err) {
-      setResult(null); // Clean state reset: clear stale previous results on failure
+      setResult(null); // Clean state reset on failure
       setError(err instanceof Error ? err.message : 'Unexpected error occurred.');
     } finally {
       setIsLoading(false);
@@ -56,7 +89,7 @@ export default function HomePage() {
   }
 
   return (
-    <main className="mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-6 lg:px-8">
+    <main id="main-content" className="mx-auto max-w-5xl space-y-6 px-4 py-10 sm:px-6 lg:px-8">
       <header className="space-y-1.5">
         <p className="font-mono text-xs uppercase tracking-widest text-forest">
           VayuGuide · Pan-India Air Quality Telemetry
@@ -73,29 +106,34 @@ export default function HomePage() {
       <div
         role="tablist"
         aria-label="View mode selection"
+        onKeyDown={handleTabKeyDown}
         className="inline-flex rounded-xl border border-hairline bg-surface p-1 shadow-sm"
       >
         <button
+          ref={singleTabRef}
           id="tab-single"
           type="button"
           role="tab"
+          tabIndex={mode === 'single' ? 0 : -1}
           aria-selected={mode === 'single'}
           aria-controls="panel-single"
           onClick={() => setMode('single')}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15502E] focus-visible:ring-offset-1 ${
             mode === 'single' ? 'bg-forest text-white' : 'text-ink/75 hover:text-ink'
           }`}
         >
           Single Household Plan
         </button>
         <button
+          ref={compareTabRef}
           id="tab-compare"
           type="button"
           role="tab"
+          tabIndex={mode === 'compare' ? 0 : -1}
           aria-selected={mode === 'compare'}
           aria-controls="panel-compare"
           onClick={() => setMode('compare')}
-          className={`rounded-lg px-4 py-2 text-sm font-semibold transition ${
+          className={`rounded-lg px-4 py-2 text-sm font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15502E] focus-visible:ring-offset-1 ${
             mode === 'compare' ? 'bg-forest text-white' : 'text-ink/75 hover:text-ink'
           }`}
         >
@@ -121,6 +159,7 @@ export default function HomePage() {
         {error && (
           <div
             role="alert"
+            aria-live="assertive"
             className="flex items-center gap-2.5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-900"
           >
             <AlertCircle className="h-4 w-4 shrink-0" aria-hidden="true" />
@@ -140,7 +179,7 @@ export default function HomePage() {
         )}
 
         {!isLoading && result && (
-          <div className="space-y-6">
+          <div className="space-y-6" aria-live="polite">
             <LiveAqiCard metrics={result.metrics} headline={result.guidance.headline_summary} />
             <RoutinePlanner planner={result.guidance.routine_planner} />
             <IndoorAndSwapsSection

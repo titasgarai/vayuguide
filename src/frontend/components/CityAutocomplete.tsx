@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Loader2, MapPin } from 'lucide-react';
 import { CitySuggestion } from '@/app/api/cities/route';
 
+export const AUTOCOMPLETE_DEBOUNCE_MS = 250;
+
 interface CityAutocompleteProps {
   id: string;
   label?: string;
@@ -40,7 +42,11 @@ export function CityAutocomplete({
   const [isOpen, setIsOpen] = useState(false);
   const [suggestions, setSuggestions] = useState<CitySuggestion[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
+
+  const showQuickPicks = inputValue.trim().length < 2;
+  const currentItems = showQuickPicks ? QUICK_PICKS : suggestions;
 
   // Sync external value changes
   useEffect(() => {
@@ -52,6 +58,7 @@ export function CityAutocomplete({
     function handleClickOutside(event: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
         setIsOpen(false);
+        setActiveIndex(-1);
       }
     }
     document.addEventListener('mousedown', handleClickOutside);
@@ -82,7 +89,7 @@ export function CityAutocomplete({
       } finally {
         setIsLoading(false);
       }
-    }, 250);
+    }, AUTOCOMPLETE_DEBOUNCE_MS);
 
     return () => clearTimeout(handler);
   }, [inputValue]);
@@ -91,6 +98,7 @@ export function CityAutocomplete({
     const display = item.state ? `${item.name}, ${item.state}` : item.name;
     setInputValue(display);
     setIsOpen(false);
+    setActiveIndex(-1);
     onSelectCity({
       city: item.name,
       latitude: item.latitude,
@@ -102,6 +110,7 @@ export function CityAutocomplete({
     const text = e.target.value;
     setInputValue(text);
     setIsOpen(true);
+    setActiveIndex(-1);
     // Allow free-text submission without coords (resolved server-side)
     onSelectCity({ city: text });
   }
@@ -110,7 +119,37 @@ export function CityAutocomplete({
     setIsOpen(true);
   }
 
-  const showQuickPicks = inputValue.trim().length < 2;
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!isOpen && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+      setIsOpen(true);
+      setActiveIndex(e.key === 'ArrowDown' ? 0 : currentItems.length - 1);
+      e.preventDefault();
+      return;
+    }
+
+    if (!isOpen) return;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (currentItems.length > 0) {
+        setActiveIndex((prev) => (prev + 1) % currentItems.length);
+      }
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (currentItems.length > 0) {
+        setActiveIndex((prev) => (prev <= 0 ? currentItems.length - 1 : prev - 1));
+      }
+    } else if (e.key === 'Enter') {
+      if (activeIndex >= 0 && activeIndex < currentItems.length) {
+        e.preventDefault();
+        handleSelect(currentItems[activeIndex]);
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setIsOpen(false);
+      setActiveIndex(-1);
+    }
+  }
 
   return (
     <div ref={containerRef} className="relative w-full">
@@ -132,13 +171,15 @@ export function CityAutocomplete({
           aria-autocomplete="list"
           aria-expanded={isOpen}
           aria-controls={`${id}-suggestions`}
+          aria-activedescendant={isOpen && activeIndex >= 0 ? `${id}-opt-${activeIndex}` : undefined}
           required={required}
           disabled={disabled}
           value={inputValue}
           onChange={handleInputChange}
           onFocus={handleFocus}
+          onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="w-full rounded-xl border border-hairline bg-canvas/50 py-2.5 pl-9 pr-9 text-sm text-ink placeholder:text-ink/45 focus:border-forest focus:bg-surface focus:outline-none focus:ring-2 focus:ring-forest/20 disabled:opacity-50"
+          className="w-full rounded-xl border border-hairline bg-canvas/50 py-2.5 pl-9 pr-9 text-sm text-ink placeholder:text-ink/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15502E] focus-visible:ring-offset-1 disabled:opacity-50"
         />
         <div className="pointer-events-none absolute right-3 top-3 text-ink/45">
           {isLoading ? (
@@ -160,14 +201,17 @@ export function CityAutocomplete({
               <div className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-forest">
                 Quick Picks · Pan-India Stations
               </div>
-              {QUICK_PICKS.map((item) => (
+              {QUICK_PICKS.map((item, idx) => (
                 <button
                   key={`${item.name}-${item.state}`}
+                  id={`${id}-opt-${idx}`}
                   type="button"
                   role="option"
-                  aria-selected={false}
+                  aria-selected={idx === activeIndex}
                   onClick={() => handleSelect(item)}
-                  className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm text-ink hover:bg-tint transition"
+                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm text-ink transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15502E] ${
+                    idx === activeIndex ? 'bg-tint ring-1 ring-[#15502E]' : 'hover:bg-tint'
+                  }`}
                 >
                   <span className="font-medium">{item.name}</span>
                   <span className="text-xs text-ink/55">{item.state}</span>
@@ -179,14 +223,17 @@ export function CityAutocomplete({
               <div className="px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wider text-forest">
                 Matching Indian Locations
               </div>
-              {suggestions.map((item) => (
+              {suggestions.map((item, idx) => (
                 <button
                   key={`${item.name}-${item.state}-${item.latitude}`}
+                  id={`${id}-opt-${idx}`}
                   type="button"
                   role="option"
-                  aria-selected={false}
+                  aria-selected={idx === activeIndex}
                   onClick={() => handleSelect(item)}
-                  className="flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm text-ink hover:bg-tint transition"
+                  className={`flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-left text-sm text-ink transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15502E] ${
+                    idx === activeIndex ? 'bg-tint ring-1 ring-[#15502E]' : 'hover:bg-tint'
+                  }`}
                 >
                   <span className="font-medium">{item.name}</span>
                   <span className="text-xs text-ink/65">{item.state || 'India'}</span>

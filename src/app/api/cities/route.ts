@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import { FETCH_TIMEOUT_MS } from '@/backend/lib/geo';
+import { handleApiError } from '@/backend/lib/api-error';
 
 export const maxDuration = 60;
 
@@ -23,7 +25,7 @@ export async function GET(request: Request) {
     )}&count=8&language=en&format=json`;
     const res = await fetch(geoUrl, {
       cache: 'no-store',
-      signal: AbortSignal.timeout(3500),
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
     });
 
     if (!res.ok) {
@@ -62,7 +64,6 @@ export async function GET(request: Request) {
 
     return NextResponse.json<CitySuggestion[]>(suggestions, { status: 200 });
   } catch (error) {
-    console.error('[Cities API Error]:', error);
-    return NextResponse.json<CitySuggestion[]>([]);
+    return handleApiError(error, 'Cities', 'Failed to retrieve city suggestions.');
   }
 }

@@ -14,7 +14,12 @@ const secretPatterns = [
 ];
 
 if (process.argv.includes('--staged')) {
-  const diff = execSync('.\\.git-tools\\cmd\\git.exe diff --cached', { encoding: 'utf8' });
+  let diff = '';
+  try {
+    diff = execSync('git diff --cached', { encoding: 'utf8' });
+  } catch {
+    diff = execSync('.\\.git-tools\\cmd\\git.exe diff --cached', { encoding: 'utf8' });
+  }
   const stagedHits = [];
   diff.split('\n').forEach((line, idx) => {
     if (line.startsWith('+') && !line.startsWith('+++')) {

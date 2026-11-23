@@ -74,10 +74,20 @@ const GUIDANCE_SCHEMA: Schema = {
   ],
 };
 
+export const MAX_ACTIVITY_LENGTH = 200;
+
 function sleep(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+/**
+ * Generates scientifically grounded, persona-adapted daily routine guidance and indoor hacks
+ * using the Gemini API with structured JSON output schema and exponential backoff retry.
+ *
+ * @param metrics Real-time air quality metrics for the target Indian city.
+ * @param profile User profile containing persona, air purifier ownership, and planned activity.
+ * @returns Validated AiGuidance plan.
+ */
 export async function generatePersonalizedGuidance(
   metrics: LiveAqiMetrics,
   profile: UserProfile
@@ -92,7 +102,7 @@ export async function generatePersonalizedGuidance(
   const sanitizedActivity = (profile.plannedActivity || 'General daily routine')
     .replace(/[<>]/g, '')
     .trim()
-    .slice(0, 200);
+    .slice(0, MAX_ACTIVITY_LENGTH);
 
   const prompt = `
 Generate a personalized air quality and low-emission action plan for this user:

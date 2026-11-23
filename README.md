@@ -121,17 +121,20 @@ flowchart LR
 ```text
 vayuguide/
 ├── .github/workflows/verify.yml          # CI: ESLint, TypeScript, Vitest, Production Build
-├── docs/                                 # Engineering plan, agent rules, design tokens, asset guide
-├── scripts/                              # Automated live endpoint smoke test & secret audit
+├── docs/                                 # DECISIONS.md (ADRs), CODE_QUALITY_REPORT.md, plan, design tokens
+├── scripts/                              # Automated live endpoint smoke test & cross-platform secret audit
 ├── src/
 │   ├── app/                              # Next.js 15 App Router pages, /api/cities, /api/analyze, /api/compare
 │   ├── backend/
-│   │   ├── services/aqi.service.ts       # Coordinate-first WAQI (50km proximity guard) + Open-Meteo CAMS fallback
+│   │   ├── lib/                          # Focused modules: geo.ts, naqi.ts, cache.ts, rate-limit.ts, api-error.ts, providers.ts
+│   │   ├── services/aqi.service.ts       # Lean orchestrator (<140 lines) for live telemetry failover
 │   │   ├── services/gemini.service.ts    # Gemini 3.5 Flash-Lite client with strict responseSchema JSON output
 │   │   └── validators/schemas.ts         # Zod runtime payload schemas with latitude/longitude
-│   ├── frontend/components/              # Editorial UI components with Pan-India CityAutocomplete Dropdown
+│   ├── frontend/components/              # WAI-ARIA CityAutocomplete, PersonaColumn, ProfileFields, RoutinePlanner
 │   └── shared/types/aqi.ts               # Shared TypeScript contracts
-└── tests/                                # Vitest unit & route handler tests (17 passing tests)
+├── ACCESSIBILITY.md                      # WCAG 2.1 AA statement, WAI-ARIA combobox/tabs audit, useId() scoping
+├── SECURITY.md                           # Rate limiting, prompt-injection defense, SSRF & secret isolation
+└── tests/                                # Vitest unit & route handler tests (28 passing tests in 3 suites)
 ```
 
 </details>
@@ -140,7 +143,7 @@ vayuguide/
 
 ## ✅ Live Verification Snapshot
 
-All **17 unit tests** (`npm run verify`) and **8 live production smoke checks** (`npm run smoke -- https://vayuguide.vercel.app`) pass:
+All **28 unit tests** (`npm run verify`) and **8 live production smoke checks** (`npm run smoke -- https://vayuguide.vercel.app`) pass:
 
 | Check | Endpoint | Live Verified Result | Status |
 | :--- | :--- | :--- | :---: |

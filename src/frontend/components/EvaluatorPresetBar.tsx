@@ -55,7 +55,7 @@ export function EvaluatorPresetBar({ onSelectPreset, isLoading }: EvaluatorPrese
             type="button"
             disabled={isLoading}
             onClick={() => onSelectPreset(preset.profile)}
-            className="rounded-xl border border-tint-border bg-surface px-3.5 py-1.5 text-sm font-medium text-ink transition hover:border-forest hover:bg-canvas focus:outline-none focus:ring-2 focus:ring-forest/40 disabled:opacity-50"
+            className="rounded-xl border border-tint-border bg-surface px-3.5 py-1.5 text-sm font-medium text-ink transition hover:border-forest hover:bg-canvas focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#15502E] focus-visible:ring-offset-1 disabled:opacity-50"
           >
             {preset.label}
           </button>
